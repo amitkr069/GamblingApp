@@ -14,7 +14,9 @@ def main():
         print("2. Stake Management Operations")
         print("3. Betting Mechanism")
         print("4. Game Session Management")
-        print("5. Exit Application")
+        print("5. Win/Loss Calculation Analytics")
+
+        print("6. Exit Application")
         
         main_choice = input("\nSelect a module to launch: ")
         
@@ -26,9 +28,10 @@ def main():
             betting_management()
         elif main_choice == '4':
             game_session_manager()
-        
-            
         elif main_choice == '5':
+            win_loss_calculation()
+
+        elif main_choice == '6':
             print("Shutting down... Goodbye!")
             break
         else:
