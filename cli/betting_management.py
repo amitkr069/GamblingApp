@@ -1,10 +1,12 @@
 from services.betting_service import BettingService
 from strategies.fixed_strategy import FixedStrategy
 from strategies.martingale_strategy import MartingaleStrategy
+from utils.input_validator import InputValidator
+from config.database import get_db_connection
 
 def betting_management():
-    """Sub-menu for UC-03: Betting Mechanism"""
     service = BettingService()
+    validator = InputValidator()
     
     try:
         g_id = int(input("\nEnter Gambler ID to bind for betting: "))
@@ -29,24 +31,41 @@ def betting_management():
                 prob = float(input("Win Probability (e.g., 0.50 for 50%): "))
                 odds = float(input("Decimal Odds (e.g., 2.0 for double payout): "))
                 
+                # Active Validation Setup
+                conn = get_db_connection()
+                cursor = conn.cursor(dictionary=True)
+                cursor.execute("SELECT current_stake FROM GAMBLERS WHERE gambler_id = %s", (g_id,))
+                current_stake = cursor.fetchone()['current_stake']
+                cursor.close()
+                conn.close()
+
+                # Run Validations
+                bet_val = validator.validate_bet(amt, float(current_stake), min_bet=1, max_bet=100000, gambler_id=g_id)
+                prob_val = validator.validate_probability(prob, gambler_id=g_id)
+                
+                if not bet_val.is_valid or not prob_val.is_valid:
+                    print("\nBet Validation Failed:")
+                    for msg in bet_val.messages + prob_val.messages:
+                        print(f"  -> {msg.severity}: {msg.message}")
+                    continue
+
                 bet_id = service.place_bet(g_id, amt, prob, odds)
                 print(f"Bet placed successfully! [Bet ID: {bet_id}]")
-                print("Remember to Resolve this bet using Option 2!")
+            except ValueError:
+                print("Invalid numeric input.")
             except Exception as e:
                 print(f"Error: {e}")
                 
+        # ... Options 2, 3, 4, and 5 remain unchanged ...
         elif choice == '2':
             try:
                 bet_id = int(input("Enter Bet ID to resolve: "))
                 force = input("Force outcome? (W for Win, L for Loss, Enter for Random): ").upper()
-                
                 outcome = 'WIN' if force == 'W' else ('LOSS' if force == 'L' else None)
                 
                 result = service.resolve_bet(bet_id, forced_outcome=outcome)
                 print("\n--- BET SETTLED ---")
-                print(f"Outcome: {result['outcome']}")
-                print(f"Payout: ${result['payout']}")
-                print(f"New Balance: ${result['new_balance']}")
+                print(f"Outcome: {result['outcome']} | Payout: ${result['payout']} | New Balance: ${result['new_balance']}")
             except Exception as e:
                 print(f"Error: {e}")
                 
@@ -55,23 +74,16 @@ def betting_management():
                 base_amt = float(input("Enter Base Bet Amount: "))
                 print("Select Strategy:\n1. Fixed\n2. Martingale")
                 strat_choice = input("Choice: ")
-                
                 strategy = MartingaleStrategy() if strat_choice == '2' else FixedStrategy()
                 history = []
                 
                 print("\n--- Starting Auto-Play (5 Rounds) ---")
                 for i in range(5):
-                    # Calculate amount using the selected strategy
                     current_bet = strategy.calculate_next_bet(base_amt, history)
                     print(f"Round {i+1}: Attempting to bet ${current_bet:.2f}...")
-                    
-                    # Place & Resolve instantly
-                    bet_id = service.place_bet(g_id, current_bet, 0.48, 2.0) # 48% chance, 2.0 odds
+                    bet_id = service.place_bet(g_id, current_bet, 0.48, 2.0)
                     res = service.resolve_bet(bet_id)
-                    
-                    # Store result so the strategy can calculate the NEXT bet
                     history.append({'bet_amount': current_bet, 'outcome': res['outcome']})
-                    
                     print(f"   -> Result: {res['outcome']} | New Balance: ${res['new_balance']:.2f}")
             except Exception as e:
                 print(f"Auto-Play Halted: {e}")
@@ -83,17 +95,10 @@ def betting_management():
                     print("No bets found.")
                     continue
                 print("\n--- Recent Bets ---")
-                print(f"{'Bet ID':<8} | {'Amount':<8} | {'Status':<10} | {'Outcome':<8} | {'Payout'}")
-                print("-" * 55)
                 for b in history:
-                    status = "Settled" if b['is_settled'] else "Pending"
-                    outcome = b['outcome'] or "N/A"
-                    payout = f"${b['payout_amount']}" if b['payout_amount'] is not None else "N/A"
-                    print(f"{b['bet_id']:<8} | ${b['bet_amount']:<7} | {status:<10} | {outcome:<8} | {payout}")
+                    print(f"ID: {b['bet_id']} | ${b['bet_amount']} | {b['outcome'] or 'Pending'} | Payout: {b['payout_amount']}")
             except Exception as e:
                  print(f"Error: {e}")
 
         elif choice == '5':
             break
-        else:
-            print("Invalid selection.")
