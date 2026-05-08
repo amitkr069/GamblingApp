@@ -1,4 +1,4 @@
-# Gambling Simulation System
+# Gambling App
 
 ## Overview
 
